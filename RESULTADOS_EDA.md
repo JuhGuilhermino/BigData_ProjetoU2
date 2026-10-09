@@ -5,7 +5,7 @@ Resultados do `src/EDA/eda.py` rodado nos 14.262.517 tweets.
 ## Qualidade dos dados
 - Sem valores ausentes e sem timestamps inválidos.
 - Nenhum ponto fora dos EUA continentais.
-- 28.954 linhas duplicadas (0,2%). Decisão: manter.
+- 28.954 linhas duplicadas (0,2%). 
 - Período: 12/01/2013 00:00:00 a 18/01/2013 23:59:55.
 
 ## Tweets por fuso
