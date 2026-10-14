@@ -13,12 +13,11 @@ struct Data {
     int timezone;
 };
 
-std::vector<Data> readData(const std::vector<Data> dataset) {
+std::vector<Data> readData() {
     std::ifstream file(FILE_NAME);
 
     if (!file.is_open()) {
-        std::cerr << "Erro ao abrir o arquivo: " << filename << std::endl;
-        return;
+        std::cerr << "Erro ao abrir o arquivo: " << FILE_NAME << std::endl;
     }
 
     std::string line;
@@ -67,9 +66,8 @@ std::vector<Data> readData(const std::vector<Data> dataset) {
 
 int main(int argc, char const *argv[]) {
     // Ler instâncias transformando os dados para a estrutura
-    std::vector<Data> dataset = readData(dataset);
+    std::vector<Data> dataset = readData();
     
-
     // Próximos passos (ex: separar em blocos / aplicar k-means) entram aqui...
 
     return 0;
