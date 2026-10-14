@@ -3,6 +3,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <ctime>
+#include <iomanip>
 
 std::string FILE_NAME = "src/data/twitter.csv";
 
@@ -12,6 +14,28 @@ struct Data {
     long long timestamp;
     int timezone;
 };
+
+long long convertTimestampToSeconds(const std::string& timestamp_str) {
+    int year   = std::stoi(timestamp_str.substr(0, 4));
+        int month  = std::stoi(timestamp_str.substr(4, 2));
+        int day    = std::stoi(timestamp_str.substr(6, 2));
+        int hour   = std::stoi(timestamp_str.substr(8, 2));
+        int minute = std::stoi(timestamp_str.substr(10, 2));
+        int second = std::stoi(timestamp_str.substr(12, 2));
+
+        std::tm tm_struct = {};
+        tm_struct.tm_year = year - 1900; // Anos contados desde 1900
+        tm_struct.tm_mon  = month - 1;   // Meses de 0 a 11
+        tm_struct.tm_mday = day;
+        tm_struct.tm_hour = hour;
+        tm_struct.tm_min  = minute;
+        tm_struct.tm_sec  = second;
+        tm_struct.tm_isdst = -1;
+
+        // Converte para segundos totais desde 1970
+        std::time_t seconds = std::mktime(&tm_struct);
+        return static_cast<long long>(seconds);
+}
 
 std::vector<Data> readData() {
     std::ifstream file(FILE_NAME);
@@ -45,7 +69,7 @@ std::vector<Data> readData() {
                 Data entry;
                 entry.longitude = std::stod(row_values[0]);
                 entry.latitude  = std::stod(row_values[1]);
-                entry.timestamp = std::stod(row_values[2]);
+                entry.timestamp = convertTimestampToSeconds(row_values[2]);
                 entry.timezone  = std::stoi(row_values[3]);
 
                 dataset.push_back(entry);
@@ -67,8 +91,9 @@ std::vector<Data> readData() {
 int main(int argc, char const *argv[]) {
     // Ler instâncias transformando os dados para a estrutura
     std::vector<Data> dataset = readData();
+    std::cout << "Timestamp em segundos:" << dataset[0].timestamp << std::endl;
     
-    // Próximos passos (ex: separar em blocos / aplicar k-means) entram aqui...
+    // Próximos passos (ex: separar em blocos / aplicar k-means para cada bloco)
 
     return 0;
 }
