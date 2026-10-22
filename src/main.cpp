@@ -5,15 +5,21 @@
 #include <vector>
 #include <ctime>
 #include <iomanip>
+#include <random>
+#include <numeric>
+#include <stdexcept>
 
 std::string FILE_NAME = "src/data/twitter.csv";
 
-struct Data {
+struct Tweet {
     double longitude;
     double latitude;
     long long timestamp;
     int timezone;
+    int cluster = -1;
 };
+
+using Dataset = std::vector<Tweet>;
 
 long long convertTimestampToSeconds(const std::string& timestamp_str) {
     int year   = std::stoi(timestamp_str.substr(0, 4));
@@ -37,7 +43,7 @@ long long convertTimestampToSeconds(const std::string& timestamp_str) {
         return static_cast<long long>(seconds);
 }
 
-std::vector<Data> readData() {
+Dataset readData() {
     std::ifstream file(FILE_NAME);
 
     if (!file.is_open()) {
@@ -46,7 +52,7 @@ std::vector<Data> readData() {
 
     std::string line;
     int row_count = 0;
-    std::vector<Data> dataset;
+    Dataset dataset;
 
     // Ignora cabeçalho
     if (std::getline(file, line)) { }
@@ -66,13 +72,13 @@ std::vector<Data> readData() {
 
         if (row_values.size() >= 4) {
             try {
-                Data entry;
-                entry.longitude = std::stod(row_values[0]);
-                entry.latitude  = std::stod(row_values[1]);
-                entry.timestamp = convertTimestampToSeconds(row_values[2]);
-                entry.timezone  = std::stoi(row_values[3]);
+                Tweet t;
+                t.longitude = std::stod(row_values[0]);
+                t.latitude  = std::stod(row_values[1]);
+                t.timestamp = convertTimestampToSeconds(row_values[2]);
+                t.timezone  = std::stoi(row_values[3]);
 
-                dataset.push_back(entry);
+                dataset.push_back(t);
             } catch (const std::exception& e) {
                 std::cerr << "Erro de conversão na linha " << row_count << ": " << e.what() << std::endl;
             }
@@ -88,12 +94,20 @@ std::vector<Data> readData() {
     return dataset;
 }
 
+double distanceSquared(const Tweet& a, const Tweet& b){
+    double dx = a.longitude - b.longitude;
+    double dy = a.latitude - b.latitude;
+    return dx * dx + dy * dy;
+}
+
+//void kmeans2D(const std::vector<Data>)
+
 int main(int argc, char const *argv[]) {
     // Ler instâncias transformando os dados para a estrutura
-    std::vector<Data> dataset = readData();
+    Dataset dataset = readData();
     std::cout << "Timestamp em segundos:" << dataset[0].timestamp << std::endl;
     
-    // Próximos passos (ex: separar em blocos / aplicar k-means para cada bloco)
+    // Próximos passos (ex: separar em blocos / aplicar k-means para cada bloco) com MPI
 
     return 0;
 }
