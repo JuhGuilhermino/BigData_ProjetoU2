@@ -1,4 +1,8 @@
 .venv/
 __pycache__/
+.vscode/
 src/data/
+src/EDA/data/
+src/14_-_Projeto.pdf
 main
+kmeans_cuda
