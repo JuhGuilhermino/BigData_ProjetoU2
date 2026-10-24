@@ -12,22 +12,8 @@ transformer = Transformer.from_crs("EPSG:4326", "EPSG:5070", always_xy=True)
 
 def timestamp_seconds(s):
     s = s.astype("string").str.strip()
-    n = pd.to_numeric(s, errors="coerce")
-    result = pd.Series(np.nan, index=s.index)
-
-    mask = n.notna()
-    if mask.any():
-        magnitude = n[mask].abs().median()
-        divisor = 1e9 if magnitude >= 1e17 else 1e6 if magnitude >= 1e14 else 1e3 if magnitude >= 1e11 else 1
-        result.loc[mask] = n[mask] / divisor
-
-    mask = ~mask
-    result.loc[mask] = pd.to_datetime(
-        s[mask], utc=True, errors="coerce"
-    ).astype("int64") / 1e9
-
-    result.loc[mask & result.eq(-9.223372036854776e9)] = np.nan
-    return result
+    dt = pd.to_datetime(s, format="%Y%m%d%H%M%S", errors="coerce")
+    return (dt - pd.Timestamp("1970-01-01")).dt.total_seconds()
 
 
 def process(df):
@@ -54,6 +40,7 @@ def process(df):
         & df["timestamp_seconds"].notna()
     )
     df = df.loc[valid].copy()
+    df["timestamp_seconds"] = df["timestamp_seconds"].astype("int64")
 
     df["x_m"], df["y_m"] = transformer.transform(
         df["longitude"].to_numpy(), df["latitude"].to_numpy()
