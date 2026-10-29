@@ -1,0 +1,5 @@
+x_m,y_m,timestamp_seconds,timezone
+0,0,0,1
+2,4,3600,1
+4,8,7200,1
+6,12,10800,1
