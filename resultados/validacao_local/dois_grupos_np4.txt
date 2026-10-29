@@ -1,0 +1,6 @@
+Processos: 4 | tweets: 6 | k: 2
+Convergiu na iteracao 3
+Cluster 0: 3 tweets | centroide: x=0.7 m, y=0.7 m, t=0.0 h apos o inicio
+Cluster 1: 3 tweets | centroide: x=100.7 m, y=100.7 m, t=10.0 h apos o inicio
+Tempo de leitura: 0.004 s
+Tempo do k-means: 0.000 s

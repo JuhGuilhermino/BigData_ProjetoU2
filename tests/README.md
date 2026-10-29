@@ -1,6 +1,6 @@
 # Testes iniciais do K-means
 
-Estes são casos manuais de correção. Ainda não há um verificador automático e os casos não foram executados com MPI durante a preparação destes arquivos.
+Estes são casos manuais de correção. Os três casos foram executados e conferidos com 1, 2 e 4 processos. As evidências e limitações estão em [resultados da validação local](../resultados/validacao_local/README.md). Ainda não há um verificador automático
 
 Os CSVs em `fixtures/` são sintéticos e já estão no formato lido pelo `main`: x e y em metros, tempo em segundos e uma coluna de fuso. O fuso não participa do agrupamento. O tempo começa artificialmente em zero; não representa a data de tweets reais.
 
