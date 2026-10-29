@@ -27,6 +27,11 @@ scripts/benchmark.sh      mede o tempo variando o número de processos
 Makefile
 ```
 
+## Plano de testes
+
+O plano de validação e dos experimentos está em [docs/PLANO_TESTES.md](docs/PLANO_TESTES.md).
+Ele separa os testes de correção das medições de desempenho e registra o que ainda precisa ser executado.
+
 ## Requisitos
 
 - Open MPI (`sudo apt install openmpi-bin libopenmpi-dev`) e g++ com C++17
