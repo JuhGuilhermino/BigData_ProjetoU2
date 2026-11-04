@@ -1,6 +1,6 @@
 # Resultados – K-means na GPU (CUDA)
 
-Execução de 2026-11-03.
+Execução de 2026-11-03, conforme registro fornecido. Os tempos abaixo diferem dos três registros CUDA em [medicoes.csv](medicoes.csv). A origem dessa diferença precisa ser confirmada; os valores originais foram preservados. A comparação consolidada MPI/CUDA em [desempenho.md](desempenho.md) usa exclusivamente o CSV.
 
 ## Ambiente
 
@@ -28,11 +28,11 @@ Comando:
 | 3 | 3,838 | 0,150 | 4,969 |
 | **Média** | **3,849** | **0,137** | **4,958** |
 
-- Convergiu na iteração **262** nas três execuções (resultado determinístico).
+- O registro informa convergência na iteração **262** nas três execuções. A repetição desse resultado nas condições observadas não prova determinismo em qualquer ambiente ou entrada.
 - Tempo médio por iteração: ≈ 18,9 ms.
-- Leitura do CSV (CPU) é a maior parte do tempo total: ≈ 3,8 s contra ≈ 5,0 s do k-means.
+- Entre as etapas medidas, o K-means tem o maior tempo médio: 4,958 s, contra 3,849 s da leitura e 0,137 s da cópia. A soma dessas médias é 8,944 s; a leitura responde por aproximadamente 43% e o K-means por 55% dessa soma. Esse valor não mede todo o tempo da pipeline.
 
-## Clusters (idênticos nas 3 execuções)
+## Clusters (reportados como iguais nas três execuções, na precisão impressa)
 
 | Cluster | Tweets | x (m) | y (m) | t (h após o início) |
 |---|---|---|---|---|
@@ -50,4 +50,5 @@ Total: 14.262.517 tweets.
 ## Observações
 
 - Os clusters se separam principalmente por região (três grupos espaciais: ≈ (1,23M; 2,06M), ≈ (0,6M; 1,03M) e ≈ (-1,82M; 1,8M) m) e por faixa de tempo.
-- Não foi feita comparação com a versão MPI nesta execução; para isso use `make pipeline` ou `scripts/benchmark.sh`.
+- Este registro específico da GPU não contém uma medição MPI pareada. A comparação disponível no projeto está em `medicoes.csv` e `desempenho.md`.
+- Os centroides e as contagens são um resumo dos grupos. Uma visualização dos pontos coloridos por cluster exige exportar também os rótulos individuais.
