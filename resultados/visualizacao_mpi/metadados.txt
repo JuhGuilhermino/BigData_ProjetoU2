@@ -1,0 +1,8 @@
+arquivo=src/data/twitter_processed.csv
+processos=2
+tweets=14262517
+k=8
+semente=42
+max_iter=300
+convergiu=1
+amostra_max_por_rank=10000
