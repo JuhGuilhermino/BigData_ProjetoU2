@@ -27,6 +27,30 @@ scripts/benchmark.sh      mede o tempo variando o número de processos
 Makefile
 ```
 
+## Plano de testes
+
+O plano de validação e dos experimentos está em [docs/PLANO_TESTES.md](docs/PLANO_TESTES.md).
+Ele separa os testes de correção das medições de desempenho e registra as entregas concluídas e as pendências.
+
+## Resultados disponíveis
+
+- [Roteiro e resultados esperados dos testes](tests/README.md).
+- [Nove execuções de validação local](resultados/validacao_local/README.md): três casos sintéticos com 1, 2 e 4 processos.
+- [Medições brutas](resultados/medicoes.csv): 15 execuções MPI e 3 CUDA.
+- [Tabela de desempenho](resultados/desempenho.md), calculada pelas medianas de três repetições.
+- [Gráficos de speedup e eficiência MPI](resultados/desempenho.png).
+- [Ambiente e resumo das médias](resultados/resultados_cpu.md) e [registro específico da GPU](resultados/resultados_gpu.md).
+
+O ambiente de desempenho informado é um notebook com i5-13450HX e RTX 4050 Laptop. Os arquivos disponíveis não documentam uma execução no NPAD.
+
+Para regenerar a tabela e os gráficos usando as medições existentes, com o ambiente virtual já preparado:
+
+```bash
+.venv/bin/python src/desempenho.py
+```
+
+Alternativamente, use `uv run src/desempenho.py`. Ambos reprocessam o CSV sem rodar novamente o benchmark. O campo `Total` da tabela representa leitura + K-means, excluindo a cópia para a GPU e as demais etapas da pipeline. O resumo CPU usa médias, enquanto a tabela gerada usa medianas. Os tempos do registro específico da GPU diferem dos tempos CUDA do CSV; consulte a observação nesse registro antes de combinar as fontes.
+
 ## Requisitos
 
 - Open MPI (`sudo apt install openmpi-bin libopenmpi-dev`) e g++ com C++17
@@ -62,7 +86,7 @@ Parâmetros opcionais, por variável de ambiente:
 
 Exemplo: `K=16 NPS="1 2 4" REPS=5 make pipeline`.
 
-A execução termina com "Convergiu na iteracao N" ou "Limite de iteracoes atingido". Todas as configurações de processos executam exatamente as mesmas iterações, então os tempos são comparáveis; se aparecer o limite, aumente `MAX_ITER` e informe isso no relatório.
+A execução termina com "Convergiu na iteracao N" ou "Limite de iteracoes atingido". Use os mesmos dados, `k`, semente e limite ao comparar configurações, e confira o estado de convergência e o número de iterações. A mesma inicialização não garante o mesmo percurso numérico: a ordem das somas em ponto flutuante pode variar com o número de processos. Se o limite for atingido, registre isso; ao aumentá-lo, repita as configurações comparáveis. A pipeline grava novamente os arquivos de resultados; preserve as medições anteriores antes de uma nova rodada.
 
 ### Execução manual
 
@@ -95,14 +119,14 @@ O agrupamento usa então 3 dimensões: posição (x, y) e tempo, com o mesmo pes
 
 1. **Leitura paralela.** O arquivo é dividido em faixas de bytes, uma por processo. Cada processo lê apenas as linhas que *começam* dentro da sua faixa, então nenhuma linha é perdida ou lida duas vezes. Os dados ficam distribuídos desde a leitura, sem um processo centralizar tudo e depois enviar.
 2. **Normalização.** Cada processo calcula mínimo e máximo locais; `MPI_Allreduce` (MIN e MAX) obtém os globais e cada processo normaliza os seus tweets.
-3. **Centroides iniciais.** Todos sorteiam os mesmos `k` índices globais (mesma semente); o processo dono de cada tweet sorteado preenche as suas coordenadas e um `MPI_Allreduce(SUM)` entrega o resultado a todos. Como os índices seguem a ordem do arquivo, o ponto de partida não depende do número de processos: 1, 2, 4 ou 16 processos executam exatamente o mesmo algoritmo, o que torna a comparação de tempo justa.
+3. **Centroides iniciais.** Todos sorteiam os mesmos `k` índices globais (mesma semente); o processo dono de cada tweet sorteado preenche as suas coordenadas e um `MPI_Allreduce(SUM)` entrega o resultado a todos. Para o mesmo arquivo e a mesma semente, os índices seguem a ordem global dos registros e mantêm os pontos iniciais entre configurações. Ainda é necessário conferir a convergência e os resultados, pois diferenças na ordem das reduções podem afetar as somas em ponto flutuante.
 4. **A cada iteração:**
    - cada processo atribui os seus tweets ao centroide mais próximo (parte local, sem comunicação);
    - `MPI_Allreduce(MAX)` verifica se algum tweet em algum processo mudou de cluster; se nenhum mudou, o algoritmo convergiu;
    - cada processo soma x, y e tempo e conta os tweets por cluster; `MPI_Allreduce(SUM)` junta as somas e todos calculam os mesmos novos centroides.
 5. **Resultado.** Os tamanhos dos clusters são somados com `MPI_Reduce` e os tempos reportados são os do processo mais lento (`MPI_MAX`). "Tempo de leitura" inclui a normalização.
 
-A comunicação por iteração é de poucos bytes (`k` centroides com 3 valores), então o custo é dominado pelo cálculo local. Os centroides vazios mantêm a posição anterior, o que os mantém iguais em todos os processos.
+O volume comunicado por iteração depende de `k` e das três dimensões, em vez do número total de tweets. Mesmo com mensagens pequenas, a latência e a sincronização das operações coletivas podem limitar os ganhos de desempenho; os tempos disponíveis não isolam esses custos. Os centroides vazios mantêm a posição anterior, o que os mantém iguais em todos os processos.
 
 ## Versão GPU (extra)
 

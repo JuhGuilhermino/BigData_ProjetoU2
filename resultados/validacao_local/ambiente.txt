@@ -1,0 +1,11 @@
+Metadados coletados apos a rodada de validacao
+2026-10-29T17:33:16-03:00
+20311394b802c6f9a76021149ec4e8c869851c2a
+mpirun (Open MPI) 4.1.2
+
+Report bugs to http://www.open-mpi.org/community/help/
+g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+Copyright (C) 2021 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+

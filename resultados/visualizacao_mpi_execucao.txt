@@ -1,0 +1,13 @@
+Processos: 2 | tweets: 14262517 | k: 8
+Convergiu na iteracao 262
+Cluster 0: 2306017 tweets | centroide: x=1225786.6 m, y=2065140.8 m, t=28.6 h apos o inicio
+Cluster 1: 2407688 tweets | centroide: x=1234913.4 m, y=2053330.3 m, t=82.2 h apos o inicio
+Cluster 2: 1436137 tweets | centroide: x=625279.3 m, y=1031138.4 m, t=28.8 h apos o inicio
+Cluster 3: 1195896 tweets | centroide: x=-1818076.0 m, y=1810351.2 m, t=41.2 h apos o inicio
+Cluster 4: 2570519 tweets | centroide: x=1225847.1 m, y=2065198.3 m, t=139.4 h apos o inicio
+Cluster 5: 1262018 tweets | centroide: x=-1824524.3 m, y=1797019.4 m, t=125.9 h apos o inicio
+Cluster 6: 1457948 tweets | centroide: x=590879.7 m, y=1028363.2 m, t=82.0 h apos o inicio
+Cluster 7: 1626294 tweets | centroide: x=665599.3 m, y=1037589.8 m, t=139.1 h apos o inicio
+Tempo de leitura: 10.221 s
+Tempo do k-means: 23.424 s
+Amostra exportada em: resultados/visualizacao_mpi

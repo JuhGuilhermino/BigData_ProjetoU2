@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -142,7 +143,7 @@ std::vector<Centroid> initCentroids(const Dataset& data, int k, unsigned seed,
 }
 
 std::vector<Centroid> kmeans(Dataset& data, int k, int maxIterations, unsigned seed,
-                             long long offset, long long total, int rank){
+                             long long offset, long long total, int rank, bool& converged){
     //inicializar centroides aleatoriamente
     std::vector<Centroid> centroids = initCentroids(data, k, seed, offset, total);
 
@@ -173,6 +174,7 @@ std::vector<Centroid> kmeans(Dataset& data, int k, int maxIterations, unsigned s
         MPI_Allreduce(&changed, &anyChanged, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 
         if (!anyChanged && iter > 0) {
+            converged = true;
             if (rank == 0)
                 std::cout << "Convergiu na iteracao "
                           << iter + 1 << '\n';
@@ -248,7 +250,8 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     double kmeansStart = MPI_Wtime();
-    std::vector<Centroid> centroids = kmeans(dataset, k, maxIterations, seed, offset, total, rank);
+    bool converged = false;
+    std::vector<Centroid> centroids = kmeans(dataset, k, maxIterations, seed, offset, total, rank, converged);
     double kmeansTime = MPI_Wtime() - kmeansStart;
 
     std::vector<long long> sizes(k, 0);
@@ -273,6 +276,66 @@ int main(int argc, char *argv[]) {
         std::cout << "Tempo do k-means: " << maxKmeans << " s\n";
     }
 
+    // Exportação opcional, após encerrar as medições de leitura e K-means.
+    const char* exportDir = std::getenv("KMEANS_EXPORT_DIR");
+    int exportFailed = 0;
+    if (exportDir && *exportDir) {
+        namespace fs = std::filesystem;
+        if (rank == 0) {
+            std::error_code ec;
+            if (!fs::create_directories(exportDir, ec) || ec) {
+                std::cerr << "Use uma pasta nova para KMEANS_EXPORT_DIR: " << exportDir << '\n';
+                exportFailed = 1;
+            }
+        }
+        MPI_Bcast(&exportFailed, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        if (!exportFailed) {
+            const size_t cap = 10000;
+            std::vector<size_t> sample;
+            sample.reserve(std::min(cap, dataset.size()));
+            std::mt19937_64 sampler(static_cast<unsigned long long>(seed) + rank);
+            for (size_t i = 0; i < dataset.size(); ++i) {
+                if (i < cap) sample.push_back(i);
+                else {
+                    std::uniform_int_distribution<size_t> choose(0, i);
+                    size_t j = choose(sampler);
+                    if (j < cap) sample[j] = i;
+                }
+            }
+            std::sort(sample.begin(), sample.end());
+            std::ofstream points(fs::path(exportDir) / ("pontos_rank" + std::to_string(rank) + ".csv"));
+            points << "global_index,x_m,y_m,t_h,cluster\n" << std::setprecision(17);
+            for (size_t i : sample) {
+                const auto& t = dataset[i];
+                points << offset + static_cast<long long>(i) << ','
+                       << t.x * span(range, 0) + range.min[0] << ','
+                       << t.y * span(range, 1) + range.min[1] << ','
+                       << t.t * span(range, 2) / 3600.0 << ',' << t.cluster << '\n';
+            }
+            points.close();
+            if (!points) exportFailed = 1;
+            if (rank == 0) {
+                std::ofstream centers(fs::path(exportDir) / "centroides.csv");
+                centers << "cluster,tweets,x_m,y_m,t_h\n" << std::setprecision(17);
+                for (int c = 0; c < k; ++c)
+                    centers << c << ',' << sizes[c] << ','
+                            << centroids[c].x * span(range, 0) + range.min[0] << ','
+                            << centroids[c].y * span(range, 1) + range.min[1] << ','
+                            << centroids[c].t * span(range, 2) / 3600.0 << '\n';
+                centers.close();
+                if (!centers) exportFailed = 1;
+                std::ofstream meta(fs::path(exportDir) / "metadados.txt");
+                meta << "arquivo=" << path << "\nprocessos=" << size << "\ntweets=" << total
+                     << "\nk=" << k << "\nsemente=" << seed << "\nmax_iter=" << maxIterations
+                     << "\nconvergiu=" << (converged ? 1 : 0) << "\namostra_max_por_rank=" << cap << '\n';
+                meta.close();
+                if (!meta) exportFailed = 1;
+            }
+            MPI_Allreduce(MPI_IN_PLACE, &exportFailed, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+            if (rank == 0)
+                std::cout << (exportFailed ? "Falha na exportacao: " : "Amostra exportada em: ") << exportDir << '\n';
+        }
+    }
     MPI_Finalize();
-    return 0;
+    return exportFailed ? 1 : 0;
 }
