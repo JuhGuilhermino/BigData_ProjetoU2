@@ -4,7 +4,7 @@
 
 A ideia é conferir primeiro se o programa agrupa os dados corretamente. Depois disso, medir o que muda no tempo de execução quando aumentamos o número de processos.
 
-A validação inicial com dados sintéticos foi concluída localmente em 29/10/2026. Os três casos foram executados com 1, 2 e 4 processos e tiveram os resultados conferidos manualmente. Os testes adicionais, as medições de desempenho e a execução no NPAD continuam pendentes.
+A validação inicial com dados sintéticos foi concluída localmente em 29/10/2026. Os três casos foram executados com 1, 2 e 4 processos e tiveram os resultados conferidos manualmente. As medições de desempenho também foram incorporadas: 15 execuções MPI e 3 CUDA, com tabela e gráficos gerados a partir de `resultados/medicoes.csv`. Os testes adicionais continuam pendentes. O ambiente documentado para as medições é um notebook; não há evidência de execução no NPAD nos arquivos disponíveis.
 
 ## 1. Validação com dados pequenos
 
@@ -60,43 +60,61 @@ Esses casos ainda precisam ser implementados. Passar nos três casos iniciais n�
 
 ## 3. Desempenho
 
-Esta etapa ainda não foi executada. Depois de ampliar a validação de correção, executar o mesmo conjunto de dados com diferentes quantidades de processos.
+As medições fornecidas por Flávio estão em [medicoes.csv](../resultados/medicoes.csv). O arquivo contém 18 registros: três repetições para cada uma das cinco configurações MPI e três para CUDA. Os resumos de execução estão em [resultados_cpu.md](../resultados/resultados_cpu.md) e [resultados_gpu.md](../resultados/resultados_gpu.md).
 
-| Parâmetro | Proposta inicial |
+| Parâmetro | Experimento registrado |
 |---|---|
-| Dados | Mesmo arquivo processado em todas as configurações |
+| Data informada nos resumos | 03/11/2026 |
+| CPU | Intel Core i5-13450HX, 6 P-cores + 4 E-cores, 16 threads |
+| GPU | NVIDIA GeForce RTX 4050 Laptop GPU, 5772 MB |
+| Dados informados | `src/data/twitter_processed.csv`, 14.262.517 tweets |
+| Atributos | x, y e tempo, com normalização min-max |
 | Clusters | `k=8` |
 | Semente | `42` |
-| Processos | `1 2 4 8 16`, limitados aos recursos alocados |
-| Repetições | 5 por configuração |
-| Limite de iterações | Começar em 300 e conferir a convergência |
-| Referência | A própria implementação MPI com 1 processo |
-| Resumo | Mediana, mínimo e máximo dos tempos |
+| Processos MPI | `1, 2, 4, 8, 16` |
+| Repetições | 3 por configuração, substituindo a proposta inicial de 5 |
+| Limite de iterações | 300 |
+| Afinidade informada | `--bind-to core` até 10 processos; `--use-hwthread-cpus` para 16 |
+| Referência do speedup | Implementação MPI com 1 processo |
+| Estatística da tabela gerada | Mediana das três repetições |
 
-Manter os parâmetros iguais na comparação. Se for preciso aumentar o limite de iterações, repetir o conjunto comparável de medições com a nova configuração. Não misturar silenciosamente execuções convergidas com execuções interrompidas pelo limite.
+### Cálculos e reprodução
 
-O speedup será calculado como `T1 / Tp`; a eficiência, como `speedup / p`. Analisar separadamente o tempo do K-means e o tempo de leitura + K-means. Esse último não inclui todo o tempo da pipeline, como pré-processamento e compilação.
+O script `src/desempenho.py` gera [desempenho.md](../resultados/desempenho.md) e [desempenho.png](../resultados/desempenho.png). A tabela apresenta tempos, speedup e eficiência; os gráficos apresentam speedup e eficiência do MPI.
 
-Registrar em cada experimento:
+Com o ambiente virtual já preparado, executar na raiz do projeto:
 
-- Commit utilizado, data, máquina/nós e recursos alocados.
-- Versões do compilador e MPI e opções de compilação.
-- Arquivo de entrada, hash SHA-256 e quantidade de pontos válidos.
-- Quantidade de processos, k, semente e limite de iterações.
-- Saída completa de cada repetição, tempos, número de iterações e estado de convergência.
+```bash
+.venv/bin/python src/desempenho.py
+```
 
-No NPAD, ainda precisamos preparar o script de submissão e conferir os módulos e os recursos disponíveis. Os benchmarks devem rodar nos recursos de computação alocados. Resultados locais ficam separados dos resultados do NPAD.
+Essa etapa reprocessa o CSV existente, sem executar novamente o K-means. Também é possível usar `uv run src/desempenho.py` quando `uv` estiver instalado.
+
+O speedup é calculado como `T1 / Tp`; a eficiência MPI, como `speedup / p`. As colunas de leitura e de K-means usam suas respectivas medianas. Para o total, primeiro somamos leitura e K-means de cada repetição e depois calculamos a mediana dessas somas. Por isso o total pode diferir da soma das duas medianas exibidas.
+
+O total apresentado inclui apenas leitura + K-means. Não representa todo o tempo da pipeline e, na GPU, não inclui a cópia dos dados para a placa. O tempo de leitura do MPI inclui a normalização.
+
+O arquivo `resultados_cpu.md` apresenta médias; a tabela gerada apresenta medianas. Essas estatísticas devem ser identificadas e não misturadas na discussão. Para a comparação MPI/CUDA da tabela, a fonte comum é `medicoes.csv`. Os tempos de GPU em `resultados_gpu.md` diferem dos registros CUDA desse CSV; preservar ambos e confirmar a origem antes de tratá-los como as mesmas repetições.
+
+### Convergência e rastreabilidade
+
+Os resumos fornecidos informam convergência na iteração 262. O CSV registra apenas processos, repetição e tempos: não permite verificar, por si só, convergência, centroides ou contagens. As saídas completas das repetições de desempenho não estão disponíveis nesta entrega.
+
+Para completar a rastreabilidade, ainda faltam o commit efetivamente usado no benchmark, o hash SHA-256 do arquivo de entrada, as versões do compilador/MPI do ambiente medido e os logs completos. O commit e as versões registrados na validação sintética não devem ser atribuídos automaticamente ao benchmark.
+
+Uma execução no NPAD permanece como possibilidade futura, dependente de configuração e registro do ambiente. Os números atuais devem ser apresentados como medições no notebook informado.
 
 ## 4. Entregas da parte de testes
 
 - [x] Três casos pequenos com entradas, resultados esperados e nove logs de execução local.
+- [x] Medições brutas de desempenho: 15 MPI e 3 CUDA em `medicoes.csv`.
+- [x] Tabela com tempos, speedup e eficiência; gráficos de speedup e eficiência MPI.
 - [ ] Testes adicionais de correção, incluindo entradas inválidas e leitura distribuída.
-- [ ] Medições de desempenho e logs de cada repetição.
-- [ ] Tabela e gráficos de tempo, speedup e eficiência com as medições finais.
+- [ ] Logs completos e metadados restantes das repetições de desempenho.
 - [ ] Visualização de uma amostra dos pontos por cluster e distribuição temporal.
-- [ ] Texto do relatório explicando ambiente, metodologia, resultados e limitações.
+- [ ] Integração e revisão final da seção de testes e resultados no relatório do grupo.
 
-Para desenhar os clusters, ainda falta exportar os rótulos dos pontos e os centroides. A versão CUDA fica como experimento extra, depois da validação do MPI.
+Os centroides e as contagens da GPU estão documentados, mas não há exportação dos rótulos de cada ponto. Para visualizar uma amostra colorida por cluster, ainda falta essa exportação. A versão CUDA já possui medições como experimento complementar; isso não substitui uma validação completa da implementação GPU.
 
 ## 5. Registro de execução
 
@@ -108,4 +126,6 @@ Os logs desta rodada foram salvos em `resultados/validacao_local/`. Cada configu
 | 29/10/2026 | 20311394b802c6f9a76021149ec4e8c869851c2a | Local | Dimensão constante; k=1; np=1, 2 e 4 | Aprovado; 4 pontos; convergência em 2 iterações | `resultados/validacao_local/dimensao_constante_np{1,2,4}.txt` |
 | 29/10/2026 | 20311394b802c6f9a76021149ec4e8c869851c2a | Local | Dois grupos; k=2; np=1, 2 e 4 | Aprovado; 3 pontos por cluster; convergência em 3 iterações | `resultados/validacao_local/dois_grupos_np{1,2,4}.txt` |
 
-A notação `{1,2,4}` representa três arquivos separados. Preencher o campo de commit com o hash da versão usada nos testes e registrar as versões do compilador e do MPI em `resultados/validacao_local/ambiente.txt`. O hash e essas versões ainda não foram informados neste documento.
+A notação `{1,2,4}` representa três arquivos separados. O hash acima identifica a versão usada na validação sintética. As versões registradas em `resultados/validacao_local/ambiente.txt` são Open MPI 4.1.2 e g++ 11.4.0 (Ubuntu). Criar novos commits de documentação não altera esse registro histórico.
+
+As medições de desempenho de 03/11/2026 estão em `resultados/medicoes.csv`; o commit usado nessas medições ainda precisa ser confirmado. Não confundir o commit que adicionou os resultados ao Git com o commit do código que foi executado.
