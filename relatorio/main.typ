@@ -1,7 +1,4 @@
-// Fonte principal do relatório do grupo, adaptado ao modelo já utilizado.
-// Depois de gerar a amostra real MPI, copie clusters_amostra.png para figuras/
-// e altere a variável abaixo para true. Não use a figura dos testes sintéticos.
-#let incluir-amostra-mpi = false
+#let incluir-amostra-mpi = true
 
 #import "@preview/charged-ieee:0.1.4": ieee
 
@@ -42,7 +39,7 @@
       department: [Graduando em Ciência da Computação],
       organization: [DIMAp - UFRN],
       location: [Natal, Brasil],
-      // O endereço fornecido estava incompleto; preencher somente após confirmar.
+      email: "thiago_lopes7@outlook.com",
     ),
     (
       name: "Kauã do Vale Ferreira",
@@ -77,8 +74,9 @@ A implementação principal foi escrita em C++ e paralelizada com MPI
 (*Message Passing Interface*), permitindo distribuir os dados e o cálculo
 entre processos. O projeto inclui uma implementação complementar em CUDA
 e scripts Python para pré-processamento, análise exploratória e geração
-das tabelas e dos gráficos. Os experimentos disponíveis foram realizados
-em um notebook; não representam execução distribuída entre múltiplos nós.
+das tabelas e dos gráficos. Os testes de desempenho foram executados
+em um único notebook, com diferentes quantidades de processos MPI.
+Não foram realizados testes entre múltiplos nós.
 
 O pré-processamento converte longitude e latitude para metros em EPSG:5070
 e transforma o timestamp em segundos relativos à referência 1970-01-01,
@@ -89,6 +87,17 @@ normalizadas para o intervalo $[0, 1]$. Elas entram na distância sem pesos
 adicionais; igualar as amplitudes não garante influência estatística
 idêntica sobre os grupos.
 
+A análise exploratória inclui a distribuição espacial apresentada na
+@fig:mapa-eda. Esse mapa contextualiza a localização dos registros;
+as atribuições aos clusters são apresentadas separadamente na
+visualização produzida pela execução MPI.
+
+#figure(
+  image("figuras/mapa_eua.png", width: 100%),
+  caption: [Distribuição espacial dos tweets apresentada na análise exploratória.],
+  placement: none,
+) <fig:mapa-eda>
+
 = Implementação
 
 == Leitura distribuída e normalização
@@ -98,10 +107,11 @@ processo acessa o arquivo CSV e extrai a sua porção de dados, sem um
 processo central carregar e distribuir todo o conjunto. A divisão utiliza
 o tamanho do arquivo e o identificador de cada processo:
 
-```cpp
-long long begin = fileSize * rank / size;
-long long end = fileSize * (rank + 1) / size;
-```
+#figure(
+  image("figuras/Código CLP.png", width: 100%),
+  caption: [Particionamento do arquivo entre os processos MPI.],
+  placement: none,
+) <fig:codigo-particao>
 
 Como uma fronteira pode cortar uma linha, a função `readData` usa
 `seekg` e `std::getline` para ajustar o início da leitura. O critério de
@@ -113,12 +123,11 @@ Os dados locais são armazenados em um `std::vector<Tweet>`. Cada processo
 calcula seus mínimos e máximos, e a função `computeRange` utiliza
 `MPI_Allreduce` para obter os limites globais:
 
-```cpp
-MPI_Allreduce(lo.data(), range.min.data(),
-  3, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-MPI_Allreduce(hi.data(), range.max.data(),
-  3, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-```
+#figure(
+  image("figuras/Codigo CR.png", width: 100%),
+  caption: [Reduções para obter os limites globais das dimensões.],
+  placement: none,
+) <fig:codigo-limites>
 
 Com os limites globais, cada processo normaliza seus próprios registros.
 Uma dimensão constante utiliza denominador 1, evitando divisão por zero.
@@ -134,11 +143,11 @@ registros. Apenas o processo que possui o ponto sorteado preenche suas
 coordenadas no buffer; os demais contribuem com zero. Uma redução por soma
 disponibiliza os centroides iniciais a todos:
 
-```cpp
-MPI_Allreduce(MPI_IN_PLACE, buf.data(),
-  3 * k, MPI_DOUBLE, MPI_SUM,
-  MPI_COMM_WORLD);
-```
+#figure(
+  image("figuras/Codigo IC.png", width: 100%),
+  caption: [Distribuição dos centroides iniciais por redução coletiva.],
+  placement: none,
+) <fig:codigo-inicializacao>
 
 Esse procedimento mantém os pontos iniciais para o mesmo arquivo e a
 mesma semente. Entretanto, a ordem das somas em ponto flutuante pode mudar
@@ -152,23 +161,21 @@ euclidiana ao quadrado até os centroides e atribui cada ponto ao grupo
 mais próximo. Essa etapa é local. Depois, a redução abaixo verifica se
 alguma atribuição foi alterada:
 
-```cpp
-MPI_Allreduce(&changed, &anyChanged, 1,
-  MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-```
+#figure(
+  image("figuras/Codigo AC.png", width: 100%),
+  caption: [Verificação global de alterações nas atribuições.],
+  placement: none,
+) <fig:codigo-convergencia>
 
 Quando nenhuma atribuição muda, o algoritmo informa convergência e
 encerra. Caso contrário, são calculadas somas e contagens locais por
 grupo. Duas chamadas adicionais combinam essas estatísticas:
 
-```cpp
-MPI_Allreduce(MPI_IN_PLACE, sums.data(),
-  3 * k, MPI_DOUBLE, MPI_SUM,
-  MPI_COMM_WORLD);
-MPI_Allreduce(MPI_IN_PLACE, counts.data(),
-  k, MPI_LONG_LONG, MPI_SUM,
-  MPI_COMM_WORLD);
-```
+#figure(
+  image("figuras/Codigo centroids.png", width: 100%),
+  caption: [Reduções das somas e contagens para atualizar os centroides.],
+  placement: none,
+) <fig:codigo-centroides>
 
 Cada centroide é atualizado pela divisão entre soma global e contagem
 global. Clusters vazios mantêm a posição anterior. Uma iteração com
@@ -227,9 +234,15 @@ Os logs estão em `resultados/validacao_local/`, referentes ao commit
 os casos avaliados, sem demonstrar correção para toda entrada. Os tempos
 impressos como 0.000 s não foram usados para avaliar desempenho.
 
+A exportação foi verificada por cinco testes automatizados, executados
+com sucesso no notebook de Kauã. Eles cobrem execuções com e sem
+exportação, limite e repetibilidade da amostra, proteção contra
+sobrescrita, processos sem pontos locais e rejeição da visualização
+quando a execução não converge.
+
 == Experimento de desempenho
 
-O ambiente e os parâmetros informados estão na @tab:ambiente. Foram
+O ambiente e os parâmetros utilizados estão na @tab:ambiente. Foram
 registradas três repetições para cada uma das cinco configurações MPI e
 três execuções CUDA, totalizando 18 medições no arquivo `medicoes.csv`.
 O limite de 300 iterações é um teto: o algoritmo pode convergir antes.
@@ -250,8 +263,8 @@ O limite de 300 iterações é um teto: o algoritmo pode convergir antes.
   placement: none,
 ) <tab:ambiente>
 
-O resumo informa afinidade por núcleo físico até dez processos e uso de
-threads de hardware com 16 processos. A estatística adotada neste relatório
+O processador possui dez núcleos físicos e 16 threads. Na configuração
+com 16 processos, há compartilhamento de núcleos físicos. A estatística adotada neste relatório
 é a mediana. O speedup e a eficiência MPI são calculados pelas expressões
 abaixo, usando a própria implementação MPI com um processo como referência.
 
@@ -316,21 +329,34 @@ leitura e K-means foi menor no MPI com 16 processos: 7,33 s contra
 as etapas consideradas. A comparação também está sujeita às diferenças
 de instrumentação descritas na implementação.
 
-Os resumos fornecidos informam convergência na iteração 262 nas
-configurações descritas. O CSV contém somente processos, repetições e
-tempos; sem os logs completos, essa informação depende dos resumos.
-Os três tempos CUDA em `resultados_gpu.md` diferem dos registros CUDA
-do CSV. Para manter uma fonte consistente, a tabela comparativa usa
-somente `medicoes.csv`, preservando os valores originais de ambos os
-arquivos. A origem da diferença ainda precisa ser confirmada.
+A convergência foi verificada na execução complementar com dois processos
+MPI, encerrada na iteração 262. O arquivo `medicoes.csv` registra os
+tempos das repetições do benchmark, mas não armazena o número de iterações
+de cada execução.
+
+As tabelas e os gráficos de desempenho foram calculados a partir de
+`medicoes.csv`. Os três tempos CUDA de `resultados_gpu.md` diferem dos
+registros do CSV e não foram combinados com eles. A origem dessa diferença
+ainda precisa ser esclarecida.
 
 == Resultados de clustering
 
-O resumo GPU registra oito clusters, cujas contagens somam 14.262.517
-tweets. A @tab:clusters apresenta seus tamanhos e os tempos dos centroides.
-Esses valores foram extraídos do resumo fornecido; não são uma nova
-execução MPI. Os identificadores são apenas rótulos, e o tempo do
-centroide representa uma média temporal, não a duração do grupo.
+Uma execução complementar no notebook de Kauã utilizou dois processos MPI,
+k = 8, semente 42 e limite de 300 iterações. Foram processados 14.262.517
+registros, com convergência na iteração 262. As contagens e os centroides
+impressos coincidiram com os resultados CUDA registrados em `resultados_gpu.md`, na precisão
+exibida.
+Essa comparação não comprova igualdade de todas as atribuições individuais.
+
+A execução registrou 10,221 s na leitura e 23,424 s no K-means e foi
+utilizada para exportar os rótulos e produzir a visualização. Esses tempos
+não integram as repetições da tabela de desempenho, realizadas em outro
+equipamento. O log está em `resultados/visualizacao_mpi_execucao.txt`.
+
+A @tab:clusters apresenta os tamanhos dos oito clusters e os tempos dos
+centroides, confirmados nessa execução MPI. As contagens somam 14.262.517
+tweets. Os identificadores são apenas rótulos, e o tempo do centroide
+representa uma média temporal, não a duração do grupo.
 
 #figure(
   table(
@@ -345,13 +371,13 @@ centroide representa uma média temporal, não a duração do grupo.
     [6], [1.457.948], [82.0],
     [7], [1.626.294], [139.1],
   ),
-  caption: [Contagens e tempos dos centroides reportados no resumo GPU.],
+  caption: [Contagens e tempos dos centroides confirmados na execução complementar MPI.],
   placement: none,
 ) <tab:clusters>
 
 #figure(
   image("figuras/centroides_espaciais.png", width: 100%, height: 155pt, fit: "contain"),
-  caption: [Centroides reportados para CUDA em EPSG:5070. A área dos círculos é proporcional à contagem; as anotações indicam ID e tempo. Centros próximos podem se sobrepor.],
+  caption: [Centroides da execução CUDA em EPSG:5070. A área dos círculos é proporcional à contagem; as anotações indicam ID e tempo. Centros próximos podem se sobrepor.],
   scope: "parent",
   placement: top,
 ) <fig:centroides>
@@ -374,9 +400,10 @@ que os clusters correspondem a cidades ou que k = 8 é a escolha ótima.
   A @fig:amostra apresenta os rótulos efetivamente calculados pelo MPI.
   Foram exportados até 10.000 pontos por processo, com amostragem uniforme
   dentro de cada partição. Essa amostra não deve ser interpretada como
-  estimativa de densidade global. Os IDs da execução MPI não são associados
-  automaticamente aos IDs do resumo CUDA; a comparação entre execuções
-  exige conferir contagens e centroides.
+  estimativa de densidade global. Nesta execução, as contagens e os
+  centroides impressos foram comparados aos resultados CUDA registrados
+  em `resultados_gpu.md`. A visualização
+  utiliza os rótulos exportados pela execução MPI complementar.
 ] else [
   *Pendência desta versão:* a amostra dos pontos com seus rótulos MPI ainda
   precisa ser executada sobre o dataset completo e incorporada ao relatório.
@@ -387,12 +414,13 @@ que os clusters correspondem a cidades ou que k = 8 é a escolha ótima.
 
 == Limitações
 
-A avaliação contém três repetições por configuração em um único
+O benchmark contém três repetições por configuração em um único
 equipamento. Não permite generalizar os resultados para outros
-processadores ou múltiplos nós. O registro histórico do benchmark ainda
-não possui commit do código executado, hash do arquivo de entrada,
-versões do compilador/MPI e logs completos de cada repetição. Os
-metadados da validação sintética não devem preencher essas lacunas.
+processadores ou múltiplos nós. Não foram registrados, para as execuções originais do benchmark,
+o commit do código, o hash do arquivo de entrada, as versões do
+compilador e do MPI nem os logs completos de cada repetição. Os registros
+da validação sintética e da execução complementar correspondem a
+experimentos distintos.
 
 A validação de entradas inválidas, casos extremos de leitura e clusters
 vazios precisa ser ampliada. Também não foram avaliados outros valores de
@@ -409,16 +437,18 @@ contagens e os centroides impressos foram compatíveis com os resultados
 esperados para 1, 2 e 4 processos, fornecendo evidência de consistência
 para esses casos.
 
-No notebook informado, o aumento de processos reduziu o tempo mediano
+Nos testes de desempenho, o aumento de processos reduziu o tempo mediano
 do K-means de 40,96 s para 6,87 s. O speedup de 5,96 com 16 processos
 mostra ganho de desempenho, acompanhado de eficiência de 37%. A maior
 aproximação ao ganho proporcional ocorreu até quatro processos. A CUDA
 apresentou menor tempo de cálculo, enquanto a soma medida de leitura e
 K-means favoreceu o MPI com 16 processos, nas condições documentadas.
 
-Os centroides e as contagens disponíveis indicam estrutura espacial e
-temporal, sem demonstrar que o agrupamento é ótimo. A avaliação reforça a
-necessidade de distinguir correção, desempenho e interpretação dos
-clusters. Como continuidade, propõem-se completar os registros de
-reprodutibilidade, ampliar a validação, alinhar os intervalos medidos
-entre CPU e GPU e avaliar outras configurações de agrupamento.
+A execução complementar MPI confirmou convergência em 262 iterações
+e permitiu visualizar uma amostra dos pontos com seus rótulos. Os
+centroides e as contagens indicam estrutura espacial e temporal, sem
+demonstrar que o agrupamento é ótimo. Os testes sintéticos verificaram os resultados esperados nos casos
+avaliados, e o benchmark mostrou a redução do tempo com o aumento de
+processos. Como trabalhos futuros, propõem-se ampliar os casos de teste,
+registrar o ambiente completo de cada execução, alinhar os intervalos
+medidos entre CPU e GPU e comparar outros valores de k.
