@@ -61,36 +61,29 @@
 
 = Introdução
 
-Este relatório apresenta a arquitetura, os resultados e a análise de
-desempenho de uma implementação paralela do algoritmo de clusterização
-K-means, desenvolvida para a disciplina de Sistemas Big Data. O estudo
-utiliza o Twitter Geospatial Data, composto por 14.262.517 tweets
+O objetivo deste trabalho é implementar o K-means com MPI e avaliar como
+o número de processos afeta seu tempo de execução. O algoritmo foi
+aplicado ao Twitter Geospatial Data, que reúne 14.262.517 tweets
 geolocalizados nos Estados Unidos, coletados entre 12 e 18 de janeiro
-de 2013 @twitter. O objetivo é agrupar os registros considerando a posição
-espacial e a dimensão temporal, além de avaliar o efeito do número de
-processos sobre o tempo de execução.
+de 2013 @twitter. O agrupamento considera a posição e o horário de cada
+registro.
 
-A implementação principal foi escrita em C++ e paralelizada com MPI
-(*Message Passing Interface*), permitindo distribuir os dados e o cálculo
-entre processos. O projeto inclui uma implementação complementar em CUDA
-e scripts Python para pré-processamento, análise exploratória e geração
-das tabelas e dos gráficos. Os testes de desempenho foram executados
-em um único notebook, com diferentes quantidades de processos MPI.
-Não foram realizados testes entre múltiplos nós.
+A implementação usa C++ e MPI (*Message Passing Interface*). O projeto
+também inclui uma versão CUDA e scripts Python para pré-processamento,
+análise exploratória e geração de gráficos. Os testes de desempenho foram
+executados em um único notebook, com diferentes quantidades de processos.
 
 O pré-processamento converte longitude e latitude para metros em EPSG:5070
 e transforma o timestamp em segundos relativos à referência 1970-01-01,
 mantendo a base temporal comum dos registros. Os horários originais estão
 em CST @twitter. O atributo timezone permanece no CSV processado, mas não
 entra no agrupamento. As três dimensões utilizadas são x, y e tempo,
-normalizadas para o intervalo $[0, 1]$. Elas entram na distância sem pesos
-adicionais; igualar as amplitudes não garante influência estatística
-idêntica sobre os grupos.
+normalizadas para o intervalo $[0, 1]$ e usadas no cálculo da distância
+sem pesos adicionais.
 
-A análise exploratória inclui a distribuição espacial apresentada na
-@fig:mapa-eda. Esse mapa contextualiza a localização dos registros;
-as atribuições aos clusters são apresentadas separadamente na
-visualização produzida pela execução MPI.
+A @fig:mapa-eda mostra a distribuição geográfica dos tweets na análise
+exploratória. Os grupos calculados pelo K-means são apresentados na seção
+de resultados.
 
 #figure(
   image("figuras/mapa_eua.png", width: 100%),
@@ -116,9 +109,6 @@ o tamanho do arquivo e o identificador de cada processo:
 Como uma fronteira pode cortar uma linha, a função `readData` usa
 `seekg` e `std::getline` para ajustar o início da leitura. O critério de
 particionamento é atribuir cada registro à faixa em que sua linha começa.
-Os testes específicos para todos os casos extremos dessa leitura ainda
-precisam ser ampliados.
-
 Os dados locais são armazenados em um `std::vector<Tweet>`. Cada processo
 calcula seus mínimos e máximos, e a função `computeRange` utiliza
 `MPI_Allreduce` para obter os limites globais:
@@ -149,10 +139,9 @@ disponibiliza os centroides iniciais a todos:
   placement: none,
 ) <fig:codigo-inicializacao>
 
-Esse procedimento mantém os pontos iniciais para o mesmo arquivo e a
-mesma semente. Entretanto, a ordem das somas em ponto flutuante pode mudar
-com o número de processos, de modo que não se garante o mesmo percurso
-numérico para qualquer configuração.
+O mesmo arquivo e a mesma semente produzem os mesmos pontos iniciais.
+Durante as atualizações, porém, a ordem das somas em ponto flutuante pode
+variar com o número de processos e causar pequenas diferenças numéricas.
 
 == Atribuição, atualização e convergência
 
@@ -191,7 +180,7 @@ estatísticas, com memória compartilhada e operações atômicas. As somas e
 contagens retornam à CPU, que atualiza os centroides a cada iteração. O
 modelo de programação CUDA é descrito pela NVIDIA @cuda.
 
-O tempo MPI reportado é o maior entre os processos, e a leitura inclui
+O tempo medido no MPI é o maior entre os processos, e a leitura inclui
 a normalização. O intervalo do K-means MPI inclui a inicialização dos
 centroides. Na CUDA, essa inicialização ocorre antes do cronômetro do
 K-means; o intervalo cronometrado inclui as transferências das estatísticas
@@ -230,9 +219,8 @@ apresentaram coordenadas NaN ou infinitas na saída.
 
 A comparação respeitou uma casa decimal, precisão impressa pelo programa.
 Os logs estão em `resultados/validacao_local/`, referentes ao commit
-`2031139`, com Open MPI 4.1.2 e g++ 11.4.0. Esses testes são evidência para
-os casos avaliados, sem demonstrar correção para toda entrada. Os tempos
-impressos como 0.000 s não foram usados para avaliar desempenho.
+`2031139`, com Open MPI 4.1.2 e g++ 11.4.0. Os tempos impressos como
+0.000 s não foram usados na análise de desempenho.
 
 A exportação foi verificada por cinco testes automatizados, executados
 com sucesso no notebook de Kauã. Eles cobrem execuções com e sem
@@ -263,18 +251,17 @@ O limite de 300 iterações é um teto: o algoritmo pode convergir antes.
   placement: none,
 ) <tab:ambiente>
 
-O processador possui dez núcleos físicos e 16 threads. Na configuração
-com 16 processos, há compartilhamento de núcleos físicos. A estatística adotada neste relatório
-é a mediana. O speedup e a eficiência MPI são calculados pelas expressões
-abaixo, usando a própria implementação MPI com um processo como referência.
+Para cada configuração, foi calculada a mediana das três repetições.
+O speedup e a eficiência usam a própria implementação MPI com um processo
+como referência:
 
 $ S(p) = T(1) / T(p) quad E(p) = S(p) / p $
 
 O total considerado é leitura mais K-means, somados em cada repetição
 antes de calcular a mediana. Assim, ele pode diferir da soma das medianas
 das etapas. Não representa toda a pipeline nem inclui a transferência
-inicial para a GPU. O resumo CPU do repositório usa médias; a análise
-comparativa aqui utiliza as medianas do CSV.
+inicial para a GPU. O arquivo `resultados_cpu.md` apresenta médias;
+as tabelas e os gráficos deste relatório usam medianas de `medicoes.csv`.
 
 = Resultados e discussão
 
@@ -309,11 +296,11 @@ tempos continuaram caindo, mas os ganhos adicionais foram menores.
   placement: top,
 ) <fig:tempos>
 
-O processador combina núcleos de desempenhos diferentes e, com 16
-processos, utiliza threads em núcleos compartilhados. Essa característica,
-assim como os custos das operações coletivas, pode contribuir para a
-redução da eficiência observada na @fig:desempenho. As medições não
-isolam esses fatores, que permanecem hipóteses explicativas.
+O processador combina núcleos de desempenhos diferentes e possui dez
+núcleos físicos. Com 16 processos, há compartilhamento desses núcleos.
+Isso e os custos de comunicação e sincronização podem contribuir para a
+queda de eficiência na @fig:desempenho. Os testes não mediram separadamente
+o efeito de cada fator.
 
 #figure(
   image("figuras/desempenho.png", width: 100%, height: 145pt, fit: "contain"),
@@ -325,38 +312,34 @@ isolam esses fatores, que permanecem hipóteses explicativas.
 A GPU apresentou 4,95 s na etapa de K-means, correspondendo a speedup
 de 8,28 em relação ao MPI com um processo. Entretanto, a soma medida de
 leitura e K-means foi menor no MPI com 16 processos: 7,33 s contra
-8,79 s na CUDA. A vantagem no cálculo não implica menor tempo de todas
-as etapas consideradas. A comparação também está sujeita às diferenças
-de instrumentação descritas na implementação.
+8,79 s na CUDA. Portanto, a GPU foi mais rápida no cálculo, mas o MPI
+com 16 processos teve menor tempo na soma das etapas medidas. Os
+intervalos cronometrados diferem entre as versões, conforme descrito
+na seção de implementação.
 
-A convergência foi verificada na execução complementar com dois processos
-MPI, encerrada na iteração 262. O arquivo `medicoes.csv` registra os
-tempos das repetições do benchmark, mas não armazena o número de iterações
-de cada execução.
-
-As tabelas e os gráficos de desempenho foram calculados a partir de
-`medicoes.csv`. Os três tempos CUDA de `resultados_gpu.md` diferem dos
-registros do CSV e não foram combinados com eles. A origem dessa diferença
-ainda precisa ser esclarecida.
+O arquivo `medicoes.csv` registra os tempos, mas não o número de
+iterações de cada repetição. Os três tempos CUDA de `resultados_gpu.md`
+diferem dos registros do CSV e não foram combinados com eles. A origem
+dessa diferença ainda precisa ser esclarecida.
 
 == Resultados de clustering
 
 Uma execução complementar no notebook de Kauã utilizou dois processos MPI,
 k = 8, semente 42 e limite de 300 iterações. Foram processados 14.262.517
 registros, com convergência na iteração 262. As contagens e os centroides
-impressos coincidiram com os resultados CUDA registrados em `resultados_gpu.md`, na precisão
-exibida.
-Essa comparação não comprova igualdade de todas as atribuições individuais.
+impressos coincidiram com os resultados CUDA de `resultados_gpu.md`,
+na precisão exibida. Não foi feita comparação ponto a ponto das
+atribuições entre as duas versões.
 
 A execução registrou 10,221 s na leitura e 23,424 s no K-means e foi
 utilizada para exportar os rótulos e produzir a visualização. Esses tempos
 não integram as repetições da tabela de desempenho, realizadas em outro
 equipamento. O log está em `resultados/visualizacao_mpi_execucao.txt`.
 
-A @tab:clusters apresenta os tamanhos dos oito clusters e os tempos dos
-centroides, confirmados nessa execução MPI. As contagens somam 14.262.517
-tweets. Os identificadores são apenas rótulos, e o tempo do centroide
-representa uma média temporal, não a duração do grupo.
+A @tab:clusters apresenta as contagens e os tempos dos centroides dessa
+execução. A soma dos oito grupos corresponde ao total de registros de
+entrada. Os IDs são apenas rótulos; o tempo de cada centroide é a média
+dos horários dos pontos do grupo, em horas após o início do conjunto.
 
 #figure(
   table(
@@ -384,10 +367,9 @@ representa uma média temporal, não a duração do grupo.
 
 Os centroides dos IDs 0, 1 e 4; 2, 6 e 7; e 3 e 5 ocupam três regiões
 aproximadas do plano projetado, com separação temporal dentro desses
-conjuntos (@fig:centroides). Isso é compatível com o uso conjunto de
-posição e tempo. Entretanto, a figura mostra centros e contagens, sem
-revelar fronteiras ou dispersão interna dos grupos. Não permite concluir
-que os clusters correspondem a cidades ou que k = 8 é a escolha ótima.
+conjuntos (@fig:centroides). Assim, grupos espacialmente próximos podem
+se distinguir pelo horário dos registros. A figura mostra os centros;
+a distribuição dos pontos aparece na @fig:amostra.
 
 #if incluir-amostra-mpi [
   #figure(
@@ -397,58 +379,46 @@ que os clusters correspondem a cidades ou que k = 8 é a escolha ótima.
     placement: top,
   ) <fig:amostra>
 
-  A @fig:amostra apresenta os rótulos efetivamente calculados pelo MPI.
-  Foram exportados até 10.000 pontos por processo, com amostragem uniforme
-  dentro de cada partição. Essa amostra não deve ser interpretada como
-  estimativa de densidade global. Nesta execução, as contagens e os
-  centroides impressos foram comparados aos resultados CUDA registrados
-  em `resultados_gpu.md`. A visualização
-  utiliza os rótulos exportados pela execução MPI complementar.
-] else [
-  *Pendência desta versão:* a amostra dos pontos com seus rótulos MPI ainda
-  precisa ser executada sobre o dataset completo e incorporada ao relatório.
-  Os centroides acima não substituem a apresentação das atribuições dos
-  pontos. O código de exportação e o script de visualização já estão
-  disponíveis no projeto.
+  A @fig:amostra reúne 20.000 pontos com seus rótulos MPI, selecionados
+  por amostragem uniforme dentro de cada partição, com limite de 10.000
+  pontos por processo. Os painéis superiores mostram a posição dos pontos
+  e sua relação com o tempo. Os inferiores apresentam as contagens do
+  conjunto completo e o tempo médio de cada cluster. A amostra serve à
+  visualização e não deve ser usada diretamente para estimar a densidade
+  global dos registros.
 ]
 
 == Limitações
 
-O benchmark contém três repetições por configuração em um único
-equipamento. Não permite generalizar os resultados para outros
-processadores ou múltiplos nós. Não foram registrados, para as execuções originais do benchmark,
-o commit do código, o hash do arquivo de entrada, as versões do
-compilador e do MPI nem os logs completos de cada repetição. Os registros
-da validação sintética e da execução complementar correspondem a
-experimentos distintos.
+O benchmark foi limitado a três repetições por configuração em um único
+notebook. Não foram avaliados outros equipamentos nem múltiplos nós.
+Os registros das medições originais não incluem o commit, o hash da
+entrada, as versões do compilador e do MPI ou os logs completos de cada
+repetição. Os arquivos da validação sintética e da execução para
+visualização documentam testes distintos.
 
-A validação de entradas inválidas, casos extremos de leitura e clusters
-vazios precisa ser ampliada. Também não foram avaliados outros valores de
-k ou métricas como silhueta. Normalizar os atributos reduz a dependência
-das unidades, mas não prova separação adequada dos grupos nem qualidade
-ótima do agrupamento.
+A validação cobriu os casos descritos, mas ainda precisa abranger mais
+entradas inválidas, situações de leitura e clusters vazios. Não foram
+comparados outros valores de k nem calculadas métricas como silhueta.
+A normalização reduz o efeito das unidades, mas não garante influência
+idêntica das dimensões. A convergência também não demonstra que o
+agrupamento é ótimo ou que os grupos correspondem a cidades.
 
 = Conclusão
 
-O trabalho implementou K-means com MPI, distribuindo a leitura, a
-normalização e a atribuição dos pontos e consolidando as estatísticas
-por reduções coletivas. Nos três conjuntos sintéticos avaliados, as
-contagens e os centroides impressos foram compatíveis com os resultados
-esperados para 1, 2 e 4 processos, fornecendo evidência de consistência
-para esses casos.
+A implementação MPI distribuiu a leitura e o processamento dos pontos,
+combinando as estatísticas dos clusters por operações coletivas. Os três
+casos sintéticos produziram as contagens e os centroides esperados com
+1, 2 e 4 processos. A execução do conjunto completo para visualização
+convergiu na iteração 262 e permitiu examinar os grupos no espaço e no
+tempo.
 
-Nos testes de desempenho, o aumento de processos reduziu o tempo mediano
-do K-means de 40,96 s para 6,87 s. O speedup de 5,96 com 16 processos
-mostra ganho de desempenho, acompanhado de eficiência de 37%. A maior
-aproximação ao ganho proporcional ocorreu até quatro processos. A CUDA
-apresentou menor tempo de cálculo, enquanto a soma medida de leitura e
-K-means favoreceu o MPI com 16 processos, nas condições documentadas.
+Nos testes de desempenho, o tempo mediano do K-means caiu de 40,96 s
+com um processo para 6,87 s com 16. O speedup chegou a 5,96, mas a
+eficiência diminuiu para 37%, com ganhos menores a partir de oito
+processos. A CUDA teve o menor tempo de cálculo; na soma de leitura e
+K-means, o MPI com 16 processos foi mais rápido nas condições avaliadas.
 
-A execução complementar MPI confirmou convergência em 262 iterações
-e permitiu visualizar uma amostra dos pontos com seus rótulos. Os
-centroides e as contagens indicam estrutura espacial e temporal, sem
-demonstrar que o agrupamento é ótimo. Os testes sintéticos verificaram os resultados esperados nos casos
-avaliados, e o benchmark mostrou a redução do tempo com o aumento de
-processos. Como trabalhos futuros, propõem-se ampliar os casos de teste,
-registrar o ambiente completo de cada execução, alinhar os intervalos
-medidos entre CPU e GPU e comparar outros valores de k.
+Os próximos passos são ampliar os casos de teste, completar os registros
+dos experimentos, uniformizar os intervalos de medição entre MPI e CUDA
+e avaliar outros valores de k e a qualidade dos agrupamentos.
